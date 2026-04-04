@@ -1,5 +1,5 @@
 
-#error "Q4 is disabled for testing"/* q4.c – ISS-6701 Calculator
+/* q4.c – ISS-6701 Calculator
  *
  * Reads lines of the form:  <op> <num1> <num2>
  * Dynamically loads ./lib<op>.so at runtime, calls op(num1, num2),
@@ -8,7 +8,6 @@
  *
  * Compile:  gcc -o calc q4.c -ldl
  */
-
  #include <stdio.h>
  #include <stdlib.h>
  #include <string.h>
