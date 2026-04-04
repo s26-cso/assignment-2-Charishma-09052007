@@ -148,17 +148,17 @@ main:
 .Lprint:
     ld      t0, -8(s0)
     bge     s1, t0, .Lprint_done
-    beqz    s1, .Lprint_val
-    la      a0, fmt_sp
-    call    printf
-.Lprint_val:
-    ld      t0, -32(s0)
-    slli    t1, s1, 3
-    add     t0, t0, t1
-    ld      a1, 0(t0)           # result[i]
+    ld      t1, -32(s0)
+    slli    t2, s1, 3
+    add     t1, t1, t2
+    ld      a1, 0(t1)           # result[i]
     la      a0, fmt_ld
     call    printf
     addi    s1, s1, 1
+    ld      t0, -8(s0)
+    bge     s1, t0, .Lprint     # no space after the last integer
+    la      a0, fmt_sp
+    call    printf
     j       .Lprint
 .Lprint_done:
     la      a0, fmt_nl
