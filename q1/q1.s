@@ -5,12 +5,6 @@
 #   offset  0 : val   (4 bytes, int)
 #   offset  8 : left  (8 bytes, pointer)
 #   offset 16 : right (8 bytes, pointer)
-#
-# RISC-V calling convention (LP64):
-#   args     : a0-a7
-#   return   : a0
-#   callee-saved : s0-s11, sp, ra (must preserve across calls)
-#   caller-saved : a0-a7, t0-t6   (scratch, can clobber)
 
     .text
 
@@ -133,8 +127,6 @@ get_ret:
 # int getAtMost(int val, struct Node* root)
 #   a0 = val (target), a1 = root
 #   returns a0 = greatest value in tree <= val, or -1
-#
-# Iterative floor search — no stack frames needed beyond the prologue.
 # ===================================================================
     .globl getAtMost
 getAtMost:
