@@ -1,172 +1,167 @@
-# q1.s  –  Binary Search Tree  (x86-64 Linux, AT&T syntax)
+# q1.s  -  Binary Search Tree  (RISC-V 64, Linux, GNU assembler)
 #
 # struct Node { int val; struct Node* left; struct Node* right; }
-# Memory layout (24 bytes):
+# Memory layout (24 bytes, 8-byte aligned):
 #   offset  0 : val   (4 bytes, int)
 #   offset  8 : left  (8 bytes, pointer)
 #   offset 16 : right (8 bytes, pointer)
 #
-# Calling convention (System V AMD64 ABI):
-#   args : rdi, rsi, rdx, rcx, r8, r9
-#   return: rax
-#   callee-saved: rbx, rbp, r12-r15
+# RISC-V calling convention (LP64):
+#   args     : a0-a7
+#   return   : a0
+#   callee-saved : s0-s11, sp, ra (must preserve across calls)
+#   caller-saved : a0-a7, t0-t6   (scratch, can clobber)
 
     .text
 
 # ===================================================================
 # struct Node* make_node(int val)
-#   rdi = val (int)
-#   returns: rax = pointer to new node
+#   a0 = val (int)
+#   returns a0 = pointer to new zeroed node
 # ===================================================================
     .globl make_node
 make_node:
-    pushq   %rbp
-    movq    %rsp, %rbp
-    pushq   %rbx
+    addi    sp, sp, -16
+    sd      ra, 8(sp)
+    sd      s0, 0(sp)
 
-    movl    %edi, %ebx          # save val (low 32 bits of rdi)
+    mv      s0, a0              # s0 = val (save across malloc call)
 
-    movl    $24,  %edi          # malloc(24)
+    li      a0, 24              # malloc(24)
     call    malloc
 
-    movl    %ebx, 0(%rax)       # node->val   = val
-    movq    $0,   8(%rax)       # node->left  = NULL
-    movq    $0,  16(%rax)       # node->right = NULL
+    sw      s0, 0(a0)           # node->val   = val  (int, 4 bytes)
+    sd      zero, 8(a0)         # node->left  = NULL
+    sd      zero, 16(a0)        # node->right = NULL
+    # a0 already = new node ptr
 
-    popq    %rbx
-    popq    %rbp
+    ld      s0, 0(sp)
+    ld      ra, 8(sp)
+    addi    sp, sp, 16
     ret
 
 # ===================================================================
 # struct Node* insert(struct Node* root, int val)
-#   rdi = root, esi = val
-#   returns: rax = root (possibly newly created if root was NULL)
+#   a0 = root, a1 = val
+#   returns a0 = root (new node if root was NULL)
 # ===================================================================
     .globl insert
 insert:
-    pushq   %rbp
-    movq    %rsp, %rbp
-    pushq   %rbx
-    pushq   %r12
+    addi    sp, sp, -32
+    sd      ra,  24(sp)
+    sd      s0,  16(sp)         # s0 = root
+    sd      s1,   8(sp)         # s1 = val
 
-    movq    %rdi, %rbx          # rbx = root
-    movl    %esi, %r12d         # r12d = val
+    mv      s0, a0
+    mv      s1, a1
 
-    # if root == NULL: create new node and return it
-    testq   %rbx, %rbx
-    jnz     .Linsert_notnull
+    # if root == NULL: make_node(val) and return
+    bnez    s0, insert_notnull
 
-    movl    %r12d, %edi
-    call    make_node           # rax = new node
-    jmp     .Linsert_ret
+    mv      a0, s1
+    call    make_node           # a0 = new node
+    j       insert_ret
 
-.Linsert_notnull:
-    movl    0(%rbx), %eax       # eax = root->val
-    cmpl    %r12d, %eax
-    je      .Linsert_dup        # equal: no duplicate, return root
-    jg      .Linsert_left       # root->val > val: go left
+insert_notnull:
+    lw      t0, 0(s0)           # t0 = root->val
+    beq     t0, s1, insert_dup  # equal → duplicate, return root
+
+    bgt     t0, s1, insert_left # root->val > val → go left
 
     # go right
-    movq    16(%rbx), %rdi
-    movl    %r12d, %esi
+    ld      a0, 16(s0)          # a0 = root->right
+    mv      a1, s1
     call    insert
-    movq    %rax, 16(%rbx)      # root->right = result
-    movq    %rbx, %rax
-    jmp     .Linsert_ret
+    sd      a0, 16(s0)          # root->right = result
+    mv      a0, s0
+    j       insert_ret
 
-.Linsert_left:
-    movq    8(%rbx), %rdi
-    movl    %r12d, %esi
+insert_left:
+    ld      a0, 8(s0)           # a0 = root->left
+    mv      a1, s1
     call    insert
-    movq    %rax, 8(%rbx)       # root->left = result
+    sd      a0, 8(s0)           # root->left = result
 
-.Linsert_dup:
-    movq    %rbx, %rax          # return original root
+insert_dup:
+    mv      a0, s0              # return original root
 
-.Linsert_ret:
-    popq    %r12
-    popq    %rbx
-    popq    %rbp
+insert_ret:
+    ld      s1,  8(sp)
+    ld      s0,  16(sp)
+    ld      ra,  24(sp)
+    addi    sp, sp, 32
     ret
 
 # ===================================================================
 # struct Node* get(struct Node* root, int val)
-#   rdi = root, esi = val
-#   returns: rax = pointer to matching node, or NULL
+#   a0 = root, a1 = val
+#   returns a0 = pointer to node, or NULL
 # ===================================================================
     .globl get
 get:
-    pushq   %rbp
-    movq    %rsp, %rbp
+    addi    sp, sp, -16
+    sd      ra, 8(sp)
+    sd      s0, 0(sp)
 
-    # if root == NULL, return NULL
-    testq   %rdi, %rdi
-    jz      .Lget_null
+    # if root == NULL, return NULL (a0 already 0)
+    beqz    a0, get_ret
 
-    movl    0(%rdi), %eax       # eax = root->val
-    cmpl    %esi, %eax
-    je      .Lget_found
-    jg      .Lget_left
+    lw      t0, 0(a0)           # t0 = root->val
+    beq     t0, a1, get_found
+    bgt     t0, a1, get_left
 
     # go right
-    movq    16(%rdi), %rdi
+    ld      a0, 16(a0)
     call    get
-    jmp     .Lget_ret
+    j       get_ret
 
-.Lget_left:
-    movq    8(%rdi), %rdi
+get_left:
+    ld      a0, 8(a0)
     call    get
-    jmp     .Lget_ret
+    j       get_ret
 
-.Lget_found:
-    movq    %rdi, %rax
-    jmp     .Lget_ret
+get_found:
+    # a0 already = root ptr
 
-.Lget_null:
-    xorq    %rax, %rax
-
-.Lget_ret:
-    popq    %rbp
+get_ret:
+    ld      s0, 0(sp)
+    ld      ra, 8(sp)
+    addi    sp, sp, 16
     ret
 
 # ===================================================================
 # int getAtMost(int val, struct Node* root)
-#   edi = val (target), rsi = root
-#   returns: eax = greatest value in tree that is <= val, or -1
+#   a0 = val (target), a1 = root
+#   returns a0 = greatest value in tree <= val, or -1
 #
-# Iterative BST floor search.
+# Iterative floor search — no stack frames needed beyond the prologue.
 # ===================================================================
     .globl getAtMost
 getAtMost:
-    pushq   %rbp
-    movq    %rsp, %rbp
+    # pure iterative, no calls → no need to save ra
+    mv      t0, a0              # t0 = target
+    mv      t1, a1              # t1 = current node
+    li      t2, -1              # t2 = best answer
 
-    movl    %edi, %ecx          # ecx = target val
-    movq    %rsi, %rdx          # rdx = current node
-    movl    $-1,  %eax          # best = -1
+getAtMost_loop:
+    beqz    t1, getAtMost_done  # node == NULL → done
 
-.LgetAtMost_loop:
-    testq   %rdx, %rdx
-    jz      .LgetAtMost_done    # node == NULL: done
-
-    movl    0(%rdx), %esi       # esi = node->val
-    cmpl    %ecx, %esi
-    jg      .LgetAtMost_go_left # node->val > target: go left
+    lw      t3, 0(t1)           # t3 = node->val
+    bgt     t3, t0, getAtMost_left  # node->val > target → go left
 
     # node->val <= target: candidate
-    cmpl    %eax, %esi
-    jle     .LgetAtMost_go_right
-    movl    %esi, %eax          # update best
+    bge     t2, t3, getAtMost_right  # not better than best
+    mv      t2, t3              # update best
 
-.LgetAtMost_go_right:
-    movq    16(%rdx), %rdx      # go right (seek larger values still <= val)
-    jmp     .LgetAtMost_loop
+getAtMost_right:
+    ld      t1, 16(t1)          # go right
+    j       getAtMost_loop
 
-.LgetAtMost_go_left:
-    movq    8(%rdx), %rdx
-    jmp     .LgetAtMost_loop
+getAtMost_left:
+    ld      t1, 8(t1)           # go left
+    j       getAtMost_loop
 
-.LgetAtMost_done:
-    popq    %rbp
+getAtMost_done:
+    mv      a0, t2
     ret
     
